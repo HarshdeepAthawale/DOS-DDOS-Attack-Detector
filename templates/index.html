@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>DoS/DDoS Attack Detector</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script>
+        function fetchStats() {
+            fetch('/stats')
+                .then(response => response.json())
+                .then(data => {
+                    // Update packets per second
+                    const pps = data.stats.packets_per_second;
+                    const ppsElem = document.getElementById('pps');
+                    ppsElem.innerText = pps;
+                    // Color coding
+                    if (pps > 500) {
+                        ppsElem.className = 'danger';
+                    } else if (pps > 100) {
+                        ppsElem.className = 'warning';
+                    } else {
+                        ppsElem.className = 'safe';
+                    }
+
+                    // Unique IP count
+                    const uniqueIpCount = Object.keys(data.stats.ip_counter).length;
+                    document.getElementById('unique-ips').innerText = uniqueIpCount;
+
+                    // Update alert message
+                    const alertElem = document.getElementById('alert');
+                    alertElem.innerText = data.dos_alert;
+                    if (data.dos_alert && data.dos_alert.includes('DDoS detected')) {
+                        alertElem.className = 'alert ddos';
+                    } else {
+                        alertElem.className = 'alert';
+                    }
+
+                    // Update top IPs
+                    const ipCounter = data.stats.ip_counter;
+                    const sortedIps = Object.entries(ipCounter).sort((a, b) => b[1] - a[1]).slice(0, 5);
+                    let ipListHtml = '';
+                    sortedIps.forEach(([ip, count]) => {
+                        ipListHtml += `<li><strong>${ip}</strong>: ${count} packets</li>`;
+                    });
+                    document.getElementById('top-ips').innerHTML = ipListHtml || '<li>No data</li>';
+
+                    // Update recent alerts
+                    const alerts = data.alerts;
+                    let alertsHtml = '';
+                    alerts.forEach(alert => {
+                        alertsHtml += `<li>${alert}</li>`;
+                    });
+                    document.getElementById('recent-alerts').innerHTML = alertsHtml || '<li>No alerts</li>';
+
+                    // Update timestamp
+                    document.getElementById('timestamp').innerText = new Date().toLocaleTimeString();
+                });
+        }
+        setInterval(fetchStats, 1000);
+        window.onload = fetchStats;
+
+        // Dark mode toggle
+        function toggleDarkMode() {
+            document.body.classList.toggle('light-mode');
+            // Save preference
+            if(document.body.classList.contains('light-mode')) {
+                localStorage.setItem('theme', 'light');
+            } else {
+                localStorage.setItem('theme', 'dark');
+            }
+            updateThemeIcon();
+        }
+        // On load, set theme from localStorage
+        window.addEventListener('DOMContentLoaded', () => {
+            if(localStorage.getItem('theme') === 'light') {
+                document.body.classList.add('light-mode');
+            }
+            updateThemeIcon();
+        });
+        // Update icon based on mode
+        function updateThemeIcon() {
+            const icon = document.getElementById('theme-icon');
+            if(document.body.classList.contains('light-mode')) {
+                icon.textContent = '☀️';
+                icon.title = 'Switch to Dark Mode';
+            } else {
+                icon.textContent = '🌙';
+                icon.title = 'Switch to Light Mode';
+            }
+        }
+    </script>
+</head>
+<body>
+    <div class="header-bar">
+        <h1>DoS/DDoS Attack Detector</h1>
+        <button class="toggle-btn" onclick="toggleDarkMode()"><span id="theme-icon">🌙</span></button>
+    </div>
+    <div class="dashboard-container">
+        <div class="card">
+            <h2>Traffic</h2>
+            <div>
+                <strong>Packets per second:</strong> <span id="pps" class="safe">0</span>
+            </div>
+            <div>
+                <strong>Unique IPs (last second):</strong> <span id="unique-ips">0</span>
+            </div>
+            <div id="alert" class="alert"></div>
+            <div class="timestamp">Last updated: <span id="timestamp"></span></div>
+        </div>
+        <div class="card">
+            <h2>Top Offending IPs</h2>
+            <ul id="top-ips"></ul>
+        </div>
+        <div class="card">
+            <h2>Recent Alerts</h2>
+            <ul id="recent-alerts"></ul>
+        </div>
+    </div>
+</body>
+</html> 
