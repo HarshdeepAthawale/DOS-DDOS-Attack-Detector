@@ -49,6 +49,8 @@ A beginner-friendly, real-time tool to detect and visualize Denial of Service (D
 - **Last updated:** Timestamp of the latest stats.
 - **Dark/Light Mode:** Click the 🌙/☀️ icon in the top right to toggle between dark and light themes. Your preference is saved automatically.
 
+![{B79BA4BD-0DC8-4702-9E2D-C19A6440B370}](https://github.com/user-attachments/assets/3c1cd4da-9858-4f22-847e-a22a06475d5c)
+
 ---
 
 ## 🛡️ Detection Logic
@@ -68,6 +70,7 @@ Thresholds can be tuned in `detector/analysis.py`.
   ```bash
   sudo hping3 -S <target_ip> -p 80 --flood -a <spoofed_ip>
   ```
+
 
 ---
 
