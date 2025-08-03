@@ -51,6 +51,29 @@
                     });
                     document.getElementById('recent-alerts').innerHTML = alertsHtml || '<li>No alerts</li>';
 
+                    // Update advanced threat statistics
+                    const advancedStats = data.advanced_stats || {};
+                    document.getElementById('port-scans').innerText = advancedStats.port_scans || 0;
+                    document.getElementById('brute-force').innerText = advancedStats.brute_force_attempts || 0;
+                    document.getElementById('dns-amplification').innerText = advancedStats.dns_amplification || 0;
+                    document.getElementById('http-floods').innerText = advancedStats.http_floods || 0;
+                    document.getElementById('botnet-activity').innerText = advancedStats.botnet_activity || 0;
+                    document.getElementById('total-advanced-threats').innerText = advancedStats.total_advanced_threats || 0;
+
+                    // Update protocol breakdown
+                    const protocolStats = advancedStats.protocol_breakdown || {};
+                    let protocolHtml = '';
+                    Object.entries(protocolStats).forEach(([protocol, count]) => {
+                        protocolHtml += `<div class="protocol-stat"><span class="protocol">${protocol}:</span> <span class="count">${count}</span></div>`;
+                    });
+                    document.getElementById('protocol-breakdown').innerHTML = protocolHtml || '<div>No protocol data</div>';
+
+                    // Update threat summary
+                    const threatSummary = data.threat_summary || {};
+                    const severityElem = document.getElementById('threat-severity');
+                    severityElem.innerText = (threatSummary.severity_level || 'low').toUpperCase();
+                    severityElem.className = `severity ${threatSummary.severity_level || 'low'}`;
+
                     // Update timestamp
                     document.getElementById('timestamp').innerText = new Date().toLocaleTimeString();
                 });
@@ -95,25 +118,78 @@
         <button class="toggle-btn" onclick="toggleDarkMode()"><span id="theme-icon">🌙</span></button>
     </div>
     <div class="dashboard-container">
+        <!-- Traditional Traffic Monitoring -->
         <div class="card">
-            <h2>Traffic</h2>
-            <div>
+            <h2>🚦 Traffic Overview</h2>
+            <div class="stat-row">
                 <strong>Packets per second:</strong> <span id="pps" class="safe">0</span>
             </div>
-            <div>
+            <div class="stat-row">
                 <strong>Unique IPs (last second):</strong> <span id="unique-ips">0</span>
             </div>
             <div id="alert" class="alert"></div>
             <div class="timestamp">Last updated: <span id="timestamp"></span></div>
         </div>
+
+        <!-- Advanced Threat Detection -->
         <div class="card">
-            <h2>Top Offending IPs</h2>
+            <h2>🛡️ Advanced Threat Detection</h2>
+            <div class="threat-grid">
+                <div class="threat-item">
+                    <span class="threat-label">🔍 Port Scans:</span>
+                    <span id="port-scans" class="threat-count">0</span>
+                </div>
+                <div class="threat-item">
+                    <span class="threat-label">🔐 Brute Force:</span>
+                    <span id="brute-force" class="threat-count">0</span>
+                </div>
+                <div class="threat-item">
+                    <span class="threat-label">📡 DNS Amplification:</span>
+                    <span id="dns-amplification" class="threat-count">0</span>
+                </div>
+                <div class="threat-item">
+                    <span class="threat-label">🌊 HTTP Floods:</span>
+                    <span id="http-floods" class="threat-count">0</span>
+                </div>
+                <div class="threat-item">
+                    <span class="threat-label">🤖 Botnet Activity:</span>
+                    <span id="botnet-activity" class="threat-count">0</span>
+                </div>
+                <div class="threat-item total">
+                    <span class="threat-label">⚠️ Total Advanced Threats:</span>
+                    <span id="total-advanced-threats" class="threat-count">0</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Threat Severity -->
+        <div class="card">
+            <h2>🎯 Threat Level</h2>
+            <div class="severity-display">
+                <span class="severity-label">Current Threat Level:</span>
+                <span id="threat-severity" class="severity low">LOW</span>
+            </div>
+        </div>
+
+        <!-- Protocol Analysis -->
+        <div class="card">
+            <h2>📊 Protocol Breakdown</h2>
+            <div id="protocol-breakdown" class="protocol-stats">
+                <div>No protocol data</div>
+            </div>
+        </div>
+
+        <!-- Top Offending IPs -->
+        <div class="card">
+            <h2>🎯 Top Offending IPs</h2>
             <ul id="top-ips"></ul>
         </div>
+
+        <!-- Recent Alerts -->
         <div class="card">
-            <h2>Recent Alerts</h2>
+            <h2>🚨 Recent Alerts</h2>
             <ul id="recent-alerts"></ul>
         </div>
     </div>
 </body>
-</html> 
+</html>
