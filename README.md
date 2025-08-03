@@ -6,20 +6,37 @@ A beginner-friendly, real-time tool to detect and visualize Denial of Service (D
 
 ## 🚀 Features
 - **Real-time network traffic monitoring**
-- **Detects multiple attack types:**
-  - DDoS (many IPs, high packet rate)
-  - DoS (single IP, high packet rate)
-  - UDP Flood
-  - ICMP Flood (Ping of Death)
-  - Slowloris-style (incomplete TCP handshakes)
+- **Comprehensive attack detection:**
+  - **DDoS:** Distributed attacks from multiple IPs with high packet rates
+  - **DoS:** High-volume attacks from single/few IPs
+  - **UDP Flood:** Excessive UDP packet bombardment
+  - **ICMP Flood:** Ping of Death and ICMP flooding attacks
+  - **Slowloris:** Incomplete TCP handshake attacks
+  - **Port Scanning:** Rapid port scan detection from single IPs
+  - **Brute Force:** Failed authentication attempt tracking
+  - **DNS Amplification:** Abnormal DNS query pattern detection
+  - **Advanced SYN Flood:** Sophisticated TCP SYN flood identification
+  - **Application Layer Attacks:** HTTP floods and Slowloris variations
+  - **Botnet Detection:** Coordinated attack pattern identification
+- **Advanced analytics:**
+  - Real-time packet analysis with deep inspection
+  - Statistical anomaly detection
+  - Behavioral pattern recognition
+  - Threat intelligence correlation
 - **Live dashboard:**
-  - Packets per second (color-coded)
-  - Unique IP count
-  - Top offending IPs
-  - Recent alerts (with DDoS highlight)
+  - Packets per second (color-coded threat levels)
+  - Unique IP count and geographic distribution
+  - Top offending IPs with threat scores
+  - Recent alerts with severity classification
+  - Attack type breakdown and statistics
+  - Real-time threat map visualization
   - Last update timestamp
   - **Dark/Light mode toggle with icon** (🌙/☀️)
-- **Beginner-friendly UI**
+- **Alert system:**
+  - Email notifications for critical threats
+  - Configurable alert thresholds
+  - Multi-level severity classification
+- **Beginner-friendly UI with professional-grade detection**
 - **Easy setup and usage**
 
 ---
@@ -54,13 +71,29 @@ A beginner-friendly, real-time tool to detect and visualize Denial of Service (D
 ---
 
 ## 🛡️ Detection Logic
-- **DDoS:** High packet rate (default >500/sec) AND many unique IPs (default >50/sec)
-- **DoS:** High packet rate from a single/few IPs
-- **UDP Flood:** Excessive UDP packets
-- **ICMP Flood:** Excessive ICMP (ping) packets
-- **Slowloris:** Many incomplete TCP handshakes
 
-Thresholds can be tuned in `detector/analysis.py`.
+### **Core Attack Detection:**
+- **DDoS:** High packet rate (>500/sec) AND many unique IPs (>50/sec)
+- **DoS:** High packet rate from single/few IPs (>100/sec)
+- **UDP Flood:** Excessive UDP packets (>80/sec)
+- **ICMP Flood:** Excessive ICMP packets (>50/sec)
+- **Slowloris:** Incomplete TCP handshakes (>30 from single IP)
+
+### **Advanced Security Detection:**
+- **Port Scanning:** Rapid connection attempts to multiple ports from single IP
+- **Brute Force:** Multiple failed authentication attempts within time window
+- **DNS Amplification:** Abnormal DNS query patterns and response ratios
+- **Advanced SYN Flood:** Sophisticated TCP SYN flood with sequence analysis
+- **Application Layer Attacks:** HTTP flood detection and Slowloris variations
+- **Botnet Detection:** Coordinated attack patterns from multiple sources
+
+### **Analysis Methods:**
+- **Statistical Analysis:** Traffic pattern deviation detection
+- **Behavioral Analysis:** IP reputation and activity profiling
+- **Temporal Analysis:** Time-based attack pattern recognition
+- **Protocol Analysis:** Deep packet inspection for protocol anomalies
+
+All detection thresholds are configurable in `detector/analysis.py` and `detector/advanced_analysis.py`.
 
 ---
 
