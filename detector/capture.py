@@ -2,10 +2,15 @@ from scapy.all import sniff
 from collections import defaultdict
 import time
 import re
-from .advanced_analysis import AdvancedThreatDetector
 
-# Initialize advanced threat detector
-advanced_detector = AdvancedThreatDetector()
+# Simple threat detection thresholds
+THREAT_THRESHOLDS = {
+    'port_scan_threshold': 10,  # ports per minute
+    'syn_flood_threshold': 50,  # SYN packets per second
+    'http_flood_threshold': 30,  # HTTP requests per minute
+    'dns_amplification_threshold': 100,  # DNS queries per minute
+    'brute_force_threshold': 20,  # attempts per minute
+}
 
 traffic_stats = {
     'total_packets': 0,
