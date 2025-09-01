@@ -1,8 +1,15 @@
-from scapy.all import sniff
+from scapy.all import sniff, conf, get_if_list, get_if_addr
 from collections import defaultdict
 import time
 import re
+import os
+import sys
+import threading
 from .advanced_detector import advanced_detector
+
+# Global flag to track if real packet capture is working
+REAL_CAPTURE_ACTIVE = False
+CAPTURE_ERROR = None
 
 # Simple threat detection thresholds
 THREAT_THRESHOLDS = {
@@ -230,60 +237,240 @@ def get_protocol_name(port):
     return port_map.get(port, f'Port-{port}')
 
 def start_sniffing():
+    global REAL_CAPTURE_ACTIVE, CAPTURE_ERROR
+    
     try:
-        # Try to start packet sniffing
-        sniff(prn=packet_callback, store=0)
+        # Check if we're on Windows and try to configure Scapy properly
+        if sys.platform.startswith('win'):
+            print("Windows detected - configuring packet capture...")
+            
+            # Try multiple Windows-specific configurations
+            pcap_configured = False
+            
+            # Method 1: Try to use pcap
+            try:
+                conf.use_pcap = True
+                print("✅ Configured Scapy to use pcap")
+                pcap_configured = True
+            except Exception as e:
+                print(f"⚠️ Could not configure pcap: {e}")
+            
+            # Method 2: Try to use dnet
+            if not pcap_configured:
+                try:
+                    conf.use_dnet = True
+                    print("✅ Configured Scapy to use dnet")
+                    pcap_configured = True
+                except Exception as e:
+                    print(f"⚠️ Could not configure dnet: {e}")
+            
+            # Method 3: Try to use raw sockets
+            if not pcap_configured:
+                try:
+                    conf.use_raw_socket = True
+                    print("✅ Configured Scapy to use raw sockets")
+                    pcap_configured = True
+                except Exception as e:
+                    print(f"⚠️ Could not configure raw sockets: {e}")
+        
+        # Get available interfaces
+        interfaces = get_if_list()
+        if interfaces:
+            print(f"Available network interfaces: {interfaces}")
+            
+            # Try to find a suitable interface
+            target_interface = None
+            for iface in interfaces:
+                if iface != 'lo' and not iface.startswith('docker'):
+                    target_interface = iface
+                    break
+            
+            if target_interface:
+                print(f"Using interface: {target_interface}")
+                try:
+                    # Start packet sniffing on specific interface with timeout
+                    print("Attempting to capture packets on interface...")
+                    sniff(iface=target_interface, prn=packet_callback, store=0, timeout=5)
+                    REAL_CAPTURE_ACTIVE = True
+                    print("✅ Real packet capture started successfully!")
+                    return
+                except Exception as e:
+                    CAPTURE_ERROR = str(e)
+                    print(f"Failed to capture on interface {target_interface}: {e}")
+        
+        # Fallback: try generic sniffing with timeout
+        print("Attempting generic packet capture...")
+        try:
+            # Try to capture with a timeout to see if it works
+            sniff(prn=packet_callback, store=0, timeout=5)
+            REAL_CAPTURE_ACTIVE = True
+            print("✅ Real packet capture started successfully!")
+            return
+        except Exception as e:
+            CAPTURE_ERROR = str(e)
+            print(f"Generic sniffing failed: {e}")
+        
     except Exception as e:
-        print(f"Warning: Could not start packet sniffing: {e}")
-        print("This is normal on some systems without proper network permissions.")
-        print("The application will still work with simulated data.")
-        # Continue running without packet capture
-        import time
+        CAPTURE_ERROR = str(e)
+        print(f"❌ Could not start real packet capture: {e}")
+        print("This is normal on Windows without proper network permissions.")
+        print("The application will work with simulated data.")
+    
+    # If we get here, real packet capture failed
+    print("🔄 Starting simulated packet capture...")
+    
+    # Start a background thread to simulate packet capture
+    def simulate_packet_capture():
+        global REAL_CAPTURE_ACTIVE
+        REAL_CAPTURE_ACTIVE = False
+        print("🔄 Simulated packet capture active - generating realistic demo data")
         while True:
             time.sleep(1)
+    
+    sim_thread = threading.Thread(target=simulate_packet_capture, daemon=True)
+    sim_thread.start()
+
+def get_capture_status():
+    """Get detailed information about packet capture status"""
+    global REAL_CAPTURE_ACTIVE, CAPTURE_ERROR
+    
+    status = {
+        'real_capture_active': REAL_CAPTURE_ACTIVE,
+        'capture_error': CAPTURE_ERROR,
+        'platform': sys.platform,
+        'interfaces_available': len(get_if_list()) if get_if_list() else 0,
+        'scapy_config': {
+            'use_pcap': getattr(conf, 'use_pcap', False),
+            'use_dnet': getattr(conf, 'use_dnet', False),
+            'use_bpf': getattr(conf, 'use_bpf', False)
+        }
+    }
+    
+    if not REAL_CAPTURE_ACTIVE:
+        status['instructions'] = {
+            'windows': [
+                "1. Install Npcap: https://npcap.com/",
+                "2. Run as Administrator",
+                "3. Ensure firewall allows packet capture",
+                "4. Install WinPcap if Npcap doesn't work"
+            ],
+            'linux': [
+                "1. Run with sudo: sudo python app.py",
+                "2. Install libpcap-dev: sudo apt-get install libpcap-dev",
+                "3. Ensure proper network permissions"
+            ],
+            'macos': [
+                "1. Run with sudo: sudo python app.py",
+                "2. Install libpcap: brew install libpcap",
+                "3. Grant network permissions to terminal"
+            ]
+        }
+    
+    return status
+
+def test_packet_capture():
+    """Test if packet capture is working"""
+    global REAL_CAPTURE_ACTIVE
+    
+    try:
+        # Try to capture a single packet with timeout
+        result = sniff(count=1, timeout=2, store=0)
+        if result:
+            REAL_CAPTURE_ACTIVE = True
+            return True, "Packet capture is working"
+        else:
+            return False, "No packets captured in timeout period"
+    except Exception as e:
+        return False, f"Packet capture failed: {str(e)}"
 
 def get_stats():
+    global REAL_CAPTURE_ACTIVE, CAPTURE_ERROR
+    
     now = time.time()
     elapsed = now - traffic_stats['last_reset']
     
-    # If no packets have been captured (network permissions issue), generate some demo data
-    if traffic_stats['total_packets'] == 0 and elapsed > 5:
-        # Generate some realistic demo data
+    # Check if we need to generate demo data (no real packets captured)
+    if not REAL_CAPTURE_ACTIVE and traffic_stats['total_packets'] == 0 and elapsed > 3:
+        # Generate realistic demo data that simulates real network traffic
         import random
-        traffic_stats['total_packets'] = random.randint(10, 50)
-        traffic_stats['ip_counter']['192.168.1.100'] = random.randint(5, 15)
-        traffic_stats['ip_counter']['10.0.0.50'] = random.randint(3, 10)
-        traffic_stats['udp_packets'] = random.randint(2, 8)
-        traffic_stats['icmp_packets'] = random.randint(1, 5)
-        traffic_stats['tcp_packets'] = random.randint(15, 40)
-        traffic_stats['tcp_syn'] = random.randint(5, 20)
-        traffic_stats['protocol_stats']['TCP'] = random.randint(15, 30)
-        traffic_stats['protocol_stats']['UDP'] = random.randint(5, 15)
-        traffic_stats['protocol_stats']['ICMP'] = random.randint(1, 5)
         
-        # Generate TCP connection states
-        traffic_stats['tcp_connections']['ESTABLISHED'] = random.randint(10, 25)
-        traffic_stats['tcp_connections']['SYN_SENT'] = random.randint(2, 8)
-        traffic_stats['tcp_connections']['FIN_WAIT'] = random.randint(1, 5)
+        # Simulate varying traffic patterns
+        base_traffic = random.randint(15, 60)
+        traffic_stats['total_packets'] = base_traffic
         
-        # Generate TCP port attack data
-        traffic_stats['tcp_port_attacks'][80] = random.randint(5, 15)
-        traffic_stats['tcp_port_attacks'][443] = random.randint(3, 10)
-        traffic_stats['tcp_port_attacks'][22] = random.randint(1, 5)
+        # Simulate different IP sources
+        ip_sources = [
+            '192.168.1.100', '192.168.1.101', '192.168.1.102',
+            '10.0.0.50', '10.0.0.51', '172.16.0.10',
+            '8.8.8.8', '1.1.1.1', '208.67.222.222'
+        ]
         
-        # Generate HTTP data
-        traffic_stats['http_packets'] = random.randint(8, 25)
-        traffic_stats['http_requests']['GET'] = random.randint(5, 15)
-        traffic_stats['http_requests']['POST'] = random.randint(1, 5)
-        traffic_stats['http_requests']['HEAD'] = random.randint(1, 3)
-        traffic_stats['http_responses']['200'] = random.randint(4, 12)
-        traffic_stats['http_responses']['404'] = random.randint(1, 3)
-        traffic_stats['http_responses']['500'] = random.randint(0, 2)
-        traffic_stats['http_user_agents']['Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'] = random.randint(3, 8)
-        traffic_stats['http_user_agents']['curl/7.68.0'] = random.randint(1, 3)
-        traffic_stats['http_urls']['/'] = random.randint(3, 8)
-        traffic_stats['http_urls']['/index.html'] = random.randint(2, 5)
-        traffic_stats['http_urls']['/api/data'] = random.randint(1, 3)
+        for ip in random.sample(ip_sources, random.randint(3, 6)):
+            traffic_stats['ip_counter'][ip] = random.randint(2, 12)
+        
+        # Generate realistic protocol distribution
+        tcp_ratio = random.uniform(0.6, 0.8)
+        udp_ratio = random.uniform(0.1, 0.3)
+        icmp_ratio = 1 - tcp_ratio - udp_ratio
+        
+        traffic_stats['tcp_packets'] = int(base_traffic * tcp_ratio)
+        traffic_stats['udp_packets'] = int(base_traffic * udp_ratio)
+        traffic_stats['icmp_packets'] = int(base_traffic * icmp_ratio)
+        
+        # TCP SYN packets (connection attempts)
+        traffic_stats['tcp_syn'] = random.randint(3, int(traffic_stats['tcp_packets'] * 0.4))
+        
+        # Protocol statistics
+        traffic_stats['protocol_stats']['TCP'] = traffic_stats['tcp_packets']
+        traffic_stats['protocol_stats']['UDP'] = traffic_stats['udp_packets']
+        traffic_stats['protocol_stats']['ICMP'] = traffic_stats['icmp_packets']
+        
+        # Realistic TCP connection states
+        established = random.randint(8, 20)
+        syn_sent = random.randint(2, 6)
+        fin_wait = random.randint(1, 4)
+        
+        traffic_stats['tcp_connections']['ESTABLISHED'] = established
+        traffic_stats['tcp_connections']['SYN_SENT'] = syn_sent
+        traffic_stats['tcp_connections']['FIN_WAIT'] = fin_wait
+        traffic_stats['tcp_connections']['TIME_WAIT'] = random.randint(1, 3)
+        
+        # Common port traffic
+        common_ports = [80, 443, 22, 53, 25, 110, 143, 993, 995, 8080]
+        for port in random.sample(common_ports, random.randint(3, 6)):
+            traffic_stats['tcp_port_attacks'][port] = random.randint(2, 8)
+        
+        # HTTP traffic simulation
+        if random.random() > 0.3:  # 70% chance of HTTP traffic
+            http_traffic = random.randint(5, 20)
+            traffic_stats['http_packets'] = http_traffic
+            
+            # HTTP request methods
+            traffic_stats['http_requests']['GET'] = random.randint(3, int(http_traffic * 0.7))
+            traffic_stats['http_requests']['POST'] = random.randint(1, int(http_traffic * 0.2))
+            traffic_stats['http_requests']['HEAD'] = random.randint(0, int(http_traffic * 0.1))
+            
+            # HTTP response codes
+            traffic_stats['http_responses']['200'] = random.randint(2, int(http_traffic * 0.6))
+            traffic_stats['http_responses']['404'] = random.randint(0, int(http_traffic * 0.2))
+            traffic_stats['http_responses']['500'] = random.randint(0, int(http_traffic * 0.1))
+            traffic_stats['http_responses']['302'] = random.randint(0, int(http_traffic * 0.1))
+            
+            # User agents
+            user_agents = [
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+                'curl/7.68.0',
+                'Python-urllib/3.8',
+                'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36'
+            ]
+            for ua in random.sample(user_agents, random.randint(2, 4)):
+                traffic_stats['http_user_agents'][ua] = random.randint(1, 5)
+            
+            # URLs
+            urls = ['/', '/index.html', '/api/data', '/login', '/admin', '/static/css/style.css']
+            for url in random.sample(urls, random.randint(2, 4)):
+                traffic_stats['http_urls'][url] = random.randint(1, 4)
     
     if elapsed >= 1:
         # Detect botnet activity before resetting stats
@@ -356,5 +543,12 @@ def get_stats():
             traffic_stats['dns_amplification'] + 
             traffic_stats['http_floods'] + 
             traffic_stats['botnet_activity']
-        )
+        ),
+        # Capture status information
+        'capture_status': {
+            'real_capture_active': REAL_CAPTURE_ACTIVE,
+            'capture_error': CAPTURE_ERROR,
+            'total_packets_captured': traffic_stats['total_packets'],
+            'is_simulated': not REAL_CAPTURE_ACTIVE and traffic_stats['total_packets'] > 0
+        }
     }

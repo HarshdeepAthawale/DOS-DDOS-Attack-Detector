@@ -87,10 +87,14 @@
 
                     // Update timestamp
                     document.getElementById('timestamp').innerText = new Date().toLocaleTimeString();
+                    
+                    
                 });
         }
         setInterval(fetchStats, 1000);
         window.onload = fetchStats;
+
+        
 
         // Dark mode toggle
         function toggleDarkMode() {
@@ -181,6 +185,8 @@
                 <span id="threat-severity" class="severity low">LOW</span>
             </div>
         </div>
+
+
 
         <!-- Basic Packet Monitoring -->
         <div class="card">
