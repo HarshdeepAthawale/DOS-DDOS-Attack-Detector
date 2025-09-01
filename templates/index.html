@@ -60,6 +60,17 @@
                     document.getElementById('botnet-activity').innerText = advancedStats.botnet_activity || 0;
                     document.getElementById('total-advanced-threats').innerText = advancedStats.total_advanced_threats || 0;
 
+                    // Update basic packet statistics
+                    const tcpPackets = data.stats.tcp_packets || 0;
+                    const udpPackets = data.stats.udp_packets || 0;
+                    const httpPackets = data.stats.http_packets || 0;
+                    const icmpPackets = data.stats.icmp_packets || 0;
+                    
+                    document.getElementById('tcp-packets').innerText = tcpPackets;
+                    document.getElementById('udp-packets').innerText = udpPackets;
+                    document.getElementById('http-packets').innerText = httpPackets;
+                    document.getElementById('icmp-packets').innerText = icmpPackets;
+
                     // Update protocol breakdown
                     const protocolStats = advancedStats.protocol_breakdown || {};
                     let protocolHtml = '';
@@ -168,6 +179,25 @@
             <div class="severity-display">
                 <span class="severity-label">Current Threat Level:</span>
                 <span id="threat-severity" class="severity low">LOW</span>
+            </div>
+        </div>
+
+        <!-- Basic Packet Monitoring -->
+        <div class="card">
+            <h2>📡 Packet Monitoring</h2>
+            <div class="packet-stats">
+                <div class="packet-stat-row">
+                    <strong>TCP Packets/sec:</strong> <span id="tcp-packets" class="packet-count">0</span>
+                </div>
+                <div class="packet-stat-row">
+                    <strong>UDP Packets/sec:</strong> <span id="udp-packets" class="packet-count">0</span>
+                </div>
+                <div class="packet-stat-row">
+                    <strong>HTTP Packets/sec:</strong> <span id="http-packets" class="packet-count">0</span>
+                </div>
+                <div class="packet-stat-row">
+                    <strong>ICMP Packets/sec:</strong> <span id="icmp-packets" class="packet-count">0</span>
+                </div>
             </div>
         </div>
 

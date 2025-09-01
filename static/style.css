@@ -258,6 +258,29 @@ li {
     padding: 4px 0;
 }
 
+/* Basic Packet Monitoring Styles */
+.packet-stats {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.packet-stat-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 4px;
+    border-left: 3px solid #90caf9;
+}
+
+.packet-count {
+    font-weight: bold;
+    color: #90caf9;
+    font-size: 1.1em;
+}
+
 /* Light mode styles for advanced features */
 .light-mode .threat-item {
     background: rgba(0, 0, 0, 0.03);
@@ -291,4 +314,14 @@ li {
 
 .light-mode .count {
     color: #388e3c;
+}
+
+/* Light mode styles for basic packet monitoring */
+.light-mode .packet-stat-row {
+    background: rgba(0, 0, 0, 0.02);
+    border-left-color: #1976d2;
+}
+
+.light-mode .packet-count {
+    color: #1976d2;
 } 

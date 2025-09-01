@@ -20,8 +20,17 @@ traffic_stats = {
     'ip_counter': defaultdict(int),
     'udp_packets': 0,
     'icmp_packets': 0,
+    'tcp_packets': 0,  # Total TCP packets
     'tcp_syn': 0,
     'tcp_syn_no_ack': defaultdict(int),  # src_ip: count of SYNs without ACKs
+    'tcp_connections': defaultdict(int),  # Connection states
+    'tcp_port_attacks': defaultdict(int),  # Port-specific attack attempts
+    'http_packets': 0,  # Total HTTP packets
+    'http_requests': defaultdict(int),  # HTTP request methods
+    'http_responses': defaultdict(int),  # HTTP response codes
+    'http_user_agents': defaultdict(int),  # User agent tracking
+    'http_urls': defaultdict(int),  # URL tracking
+    'http_headers': defaultdict(int),  # HTTP header analysis
     # Advanced detection stats
     'port_scans': 0,
     'brute_force_attempts': 0,
@@ -52,13 +61,31 @@ def packet_callback(packet):
             dst_port = tcp.dport
             src_port = tcp.sport
             
+            # Increment TCP packet counters
+            traffic_stats['tcp_packets'] += 1
             traffic_stats['protocol_stats']['TCP'] += 1
+            
+            # Track TCP connection states
+            tcp_flags = tcp.flags
+            if 'S' in tcp_flags and 'A' not in tcp_flags:  # SYN only
+                traffic_stats['tcp_connections']['SYN_SENT'] += 1
+            elif 'S' in tcp_flags and 'A' in tcp_flags:  # SYN-ACK
+                traffic_stats['tcp_connections']['SYN_RECEIVED'] += 1
+            elif 'A' in tcp_flags and 'S' not in tcp_flags and 'F' not in tcp_flags:  # ACK only
+                traffic_stats['tcp_connections']['ESTABLISHED'] += 1
+            elif 'F' in tcp_flags:  # FIN
+                traffic_stats['tcp_connections']['FIN_WAIT'] += 1
+            elif 'R' in tcp_flags:  # RST
+                traffic_stats['tcp_connections']['RESET'] += 1
             
             # Port scanning detection
             port_scan_alert = advanced_detector.detect_port_scanning(src_ip, dst_port, current_time)
             if port_scan_alert:
                 traffic_stats['port_scans'] += 1
                 traffic_stats['advanced_alerts'].append(port_scan_alert)
+            
+            # Track port-specific attack attempts
+            traffic_stats['tcp_port_attacks'][dst_port] += 1
             
             # Advanced SYN flood detection
             if tcp.flags == 'S':  # SYN
@@ -73,12 +100,15 @@ def packet_callback(packet):
                 if src_ip in traffic_stats['tcp_syn_no_ack']:
                     traffic_stats['tcp_syn_no_ack'][src_ip] = 0
             
-            # HTTP flood detection
+            # HTTP flood detection and analysis
             if dst_port in [80, 443, 8080, 8443]:  # Common HTTP ports
+                traffic_stats['http_packets'] += 1
                 try:
                     if packet.haslayer('Raw'):
                         payload = packet['Raw'].load.decode('utf-8', errors='ignore')
-                        if payload.startswith(('GET ', 'POST ', 'PUT ', 'DELETE ')):
+                        
+                        # HTTP Request Analysis
+                        if payload.startswith(('GET ', 'POST ', 'PUT ', 'DELETE ', 'HEAD ', 'OPTIONS ', 'PATCH ')):
                             # Extract HTTP details
                             lines = payload.split('\r\n')
                             if lines:
@@ -87,18 +117,63 @@ def packet_callback(packet):
                                 if len(parts) >= 3:
                                     method = parts[0]
                                     url = parts[1]
+                                    http_version = parts[2] if len(parts) > 2 else 'HTTP/1.1'
                                     
-                                    # Extract User-Agent
-                                    user_agent = 'Unknown'
+                                    # Track HTTP request methods
+                                    traffic_stats['http_requests'][method] += 1
+                                    
+                                    # Track URLs (limit to prevent memory issues)
+                                    if len(traffic_stats['http_urls']) < 100:
+                                        traffic_stats['http_urls'][url] += 1
+                                    
+                                    # Extract and track headers
                                     for line in lines[1:]:
-                                        if line.lower().startswith('user-agent:'):
-                                            user_agent = line.split(':', 1)[1].strip()
-                                            break
+                                        if ':' in line:
+                                            header_name, header_value = line.split(':', 1)
+                                            header_name = header_name.strip().lower()
+                                            header_value = header_value.strip()
+                                            
+                                            # Track User-Agent
+                                            if header_name == 'user-agent':
+                                                traffic_stats['http_user_agents'][header_value] += 1
+                                            
+                                            # Track other important headers
+                                            if header_name in ['host', 'referer', 'accept', 'content-type']:
+                                                if len(traffic_stats['http_headers']) < 50:
+                                                    traffic_stats['http_headers'][f"{header_name}: {header_value}"] += 1
                                     
-                                    http_flood_alert = advanced_detector.detect_http_flood(src_ip, method, url, user_agent)
+                                    # HTTP flood detection
+                                    http_flood_alert = advanced_detector.detect_http_flood(src_ip, method, url, 
+                                                                                         traffic_stats['http_user_agents'].get('Unknown', 'Unknown'))
                                     if http_flood_alert:
                                         traffic_stats['http_floods'] += 1
                                         traffic_stats['advanced_alerts'].append(http_flood_alert)
+                        
+                        # HTTP Response Analysis
+                        elif payload.startswith('HTTP/'):
+                            lines = payload.split('\r\n')
+                            if lines:
+                                status_line = lines[0]
+                                parts = status_line.split(' ')
+                                if len(parts) >= 2:
+                                    http_version = parts[0]
+                                    status_code = parts[1]
+                                    
+                                    # Track HTTP response codes
+                                    traffic_stats['http_responses'][status_code] += 1
+                                    
+                                    # Extract response headers
+                                    for line in lines[1:]:
+                                        if ':' in line:
+                                            header_name, header_value = line.split(':', 1)
+                                            header_name = header_name.strip().lower()
+                                            header_value = header_value.strip()
+                                            
+                                            # Track important response headers
+                                            if header_name in ['server', 'content-type', 'content-length', 'cache-control']:
+                                                if len(traffic_stats['http_headers']) < 50:
+                                                    traffic_stats['http_headers'][f"{header_name}: {header_value}"] += 1
+                                    
                 except Exception:
                     pass  # Ignore HTTP parsing errors
             
@@ -180,10 +255,35 @@ def get_stats():
         traffic_stats['ip_counter']['10.0.0.50'] = random.randint(3, 10)
         traffic_stats['udp_packets'] = random.randint(2, 8)
         traffic_stats['icmp_packets'] = random.randint(1, 5)
+        traffic_stats['tcp_packets'] = random.randint(15, 40)
         traffic_stats['tcp_syn'] = random.randint(5, 20)
         traffic_stats['protocol_stats']['TCP'] = random.randint(15, 30)
         traffic_stats['protocol_stats']['UDP'] = random.randint(5, 15)
         traffic_stats['protocol_stats']['ICMP'] = random.randint(1, 5)
+        
+        # Generate TCP connection states
+        traffic_stats['tcp_connections']['ESTABLISHED'] = random.randint(10, 25)
+        traffic_stats['tcp_connections']['SYN_SENT'] = random.randint(2, 8)
+        traffic_stats['tcp_connections']['FIN_WAIT'] = random.randint(1, 5)
+        
+        # Generate TCP port attack data
+        traffic_stats['tcp_port_attacks'][80] = random.randint(5, 15)
+        traffic_stats['tcp_port_attacks'][443] = random.randint(3, 10)
+        traffic_stats['tcp_port_attacks'][22] = random.randint(1, 5)
+        
+        # Generate HTTP data
+        traffic_stats['http_packets'] = random.randint(8, 25)
+        traffic_stats['http_requests']['GET'] = random.randint(5, 15)
+        traffic_stats['http_requests']['POST'] = random.randint(1, 5)
+        traffic_stats['http_requests']['HEAD'] = random.randint(1, 3)
+        traffic_stats['http_responses']['200'] = random.randint(4, 12)
+        traffic_stats['http_responses']['404'] = random.randint(1, 3)
+        traffic_stats['http_responses']['500'] = random.randint(0, 2)
+        traffic_stats['http_user_agents']['Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'] = random.randint(3, 8)
+        traffic_stats['http_user_agents']['curl/7.68.0'] = random.randint(1, 3)
+        traffic_stats['http_urls']['/'] = random.randint(3, 8)
+        traffic_stats['http_urls']['/index.html'] = random.randint(2, 5)
+        traffic_stats['http_urls']['/api/data'] = random.randint(1, 3)
     
     if elapsed >= 1:
         # Detect botnet activity before resetting stats
@@ -210,7 +310,13 @@ def get_stats():
         # Reset per-second counters
         traffic_stats['udp_packets'] = 0
         traffic_stats['icmp_packets'] = 0
+        traffic_stats['tcp_packets'] = 0
         traffic_stats['tcp_syn'] = 0
+        traffic_stats['tcp_connections'] = defaultdict(int)
+        traffic_stats['tcp_port_attacks'] = defaultdict(int)
+        traffic_stats['http_packets'] = 0
+        traffic_stats['http_requests'] = defaultdict(int)
+        traffic_stats['http_responses'] = defaultdict(int)
         
         # Clean up old detection data periodically (every 5 minutes)
         if int(now) % 300 == 0:
@@ -225,8 +331,17 @@ def get_stats():
         'ip_counter': dict(traffic_stats['ip_counter']),
         'udp_packets': traffic_stats['udp_packets'],
         'icmp_packets': traffic_stats['icmp_packets'],
+        'tcp_packets': traffic_stats['tcp_packets'],
         'tcp_syn': traffic_stats['tcp_syn'],
         'tcp_syn_no_ack': dict(traffic_stats['tcp_syn_no_ack']),
+        'tcp_connections': dict(traffic_stats['tcp_connections']),
+        'tcp_port_attacks': dict(traffic_stats['tcp_port_attacks']),
+        'http_packets': traffic_stats['http_packets'],
+        'http_requests': dict(traffic_stats['http_requests']),
+        'http_responses': dict(traffic_stats['http_responses']),
+        'http_user_agents': dict(traffic_stats['http_user_agents']),
+        'http_urls': dict(traffic_stats['http_urls']),
+        'http_headers': dict(traffic_stats['http_headers']),
         # Advanced detection stats
         'port_scans': traffic_stats['port_scans'],
         'brute_force_attempts': traffic_stats['brute_force_attempts'],
